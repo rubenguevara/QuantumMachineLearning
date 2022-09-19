@@ -12,8 +12,10 @@ higgs_data = higgs_data.fillna(value=higgs_data.mean())
 #To make binary versions of signal or background
 higgs_data['Label'] = pd.DataFrame(higgs_data['Label']).replace('s', 1)
 higgs_data['Label'] = pd.DataFrame(higgs_data['Label']).replace('b', 0)
+
 s = higgs_data.loc[higgs_data['Label'] == 1]
 b = higgs_data.loc[higgs_data['Label'] == 0]
+
 s_pr = s.shape[0]/(s.shape[0]+b.shape[0])
 s_n = round(s_pr*1000)
 
