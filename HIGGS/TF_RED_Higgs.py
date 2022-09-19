@@ -13,7 +13,7 @@ higgs_data = pd.read_csv("../Data/training.csv")
 higgs_data = pd.DataFrame(higgs_data).replace(-999, np.NaN)
 higgs_data = higgs_data.fillna(value=higgs_data.mean())
 
-#To make binary versions of signal or background
+# To make binary versions of signal or background
 higgs_data['Label'] = pd.DataFrame(higgs_data['Label']).replace('s', 1)
 higgs_data['Label'] = pd.DataFrame(higgs_data['Label']).replace('b', 0)
 s = higgs_data.loc[higgs_data['Label'] == 1]
@@ -35,11 +35,13 @@ higgs_pca = higgs_features.copy()
 
 pca = PCA(n_components=6, random_state=rs)
 principal_higgs = pca.fit_transform(higgs_pca)
+
 print("\n")
 print("--"*20)
 print("How much information is conserved after PCA with 6 components: ", sum(pca.explained_variance_ratio_))
 print("--"*20)
 print("\n")
+
 higgs_train, higgs_test, higgs_train_label, higgs_test_label = train_test_split(principal_higgs, higgs_labels, test_size=0.2, train_size=0.8, random_state=42)
 higgs_train = np.array(higgs_train)
 higgs_test = np.array(higgs_test)
@@ -49,36 +51,44 @@ higgs_test_label = np.array(higgs_test_label)
 normalize = layers.Normalization()
 normalize.adapt(higgs_train)
 
-def NN_model(inputsize, norm, n_layers,n_neuron,eta,lamda):
+def NN_model(inputsize, n_layers, n_neuron, eta, lamda, norm):
     model=tf.keras.Sequential([norm])      
-    for i in range(n_layers):       #Run loop to add hidden layers to the model
-        if (i==0):                  #First layer requires input dimensions
-            model.add(layers.Dense(n_neuron,activation='relu',kernel_regularizer=tf.keras.regularizers.l2(lamda),input_dim=inputsize))
-        else:                       #Subsequent layers are capable of automatic shape inferencing
-            model.add(layers.Dense(n_neuron,activation='relu',kernel_regularizer=tf.keras.regularizers.l2(lamda)))
-    model.add(layers.Dense(1,activation='sigmoid'))  #1 outputs - signal or no signal
+    
+    for i in range(n_layers):                                                # Run loop to add hidden layers to the model
+        if (i==0):                                                           # First layer requires input dimensions
+            model.add(layers.Dense(n_neuron, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(lamda), input_dim=inputsize))
+            
+        else:                                                                # Subsequent layers are capable of automatic shape inferencing
+            model.add(layers.Dense(n_neuron, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(lamda)))
+    
+    model.add(layers.Dense(1, activation='sigmoid'))                         # 1 output - signal or no signal
     sgd=tf.optimizers.SGD(learning_rate=eta)
+    
     model.compile(loss=tf.losses.BinaryCrossentropy(),
                 optimizer=sgd,
                 metrics = [tf.keras.metrics.BinaryAccuracy()])
     return model
-        
-def grid_search(n_lays, eta, lamda, n_neuron, eps):
-    n_layers = n_lays                                                        #Define number of hidden layers in the model
-    epochs = eps                                                             #Number of reiterations over the input data
-    Train_accuracy = np.zeros((len(lamda),len(eta),len(n_neuron)))           #Define matrices to store accuracy scores as a function
-    Test_accuracy = np.zeros((len(lamda),len(eta),len(n_neuron)))            #of learning rate and number of hidden neurons for 
+
+def grid_search(n_lays, eta, lamda, n_neuron, eps, b_size):
+    n_layers = n_lays                                                        # Define number of hidden layers in the model
+    epochs = eps                                                             # Number of reiterations over the input data
+    batch_size = b_size
+    Train_accuracy = np.zeros((len(lamda),len(eta),len(n_neuron)))           # Define matrices to store accuracy scores as a function
+    Test_accuracy = np.zeros((len(lamda),len(eta),len(n_neuron)))            # of learning rate and number of hidden neurons for 
 
     print('Go for a stroll, this will take a while')
-    for i in range(len(lamda)):                                              #run loops over hidden neurons and learning rates to calculate 
-        for j in range(len(eta)):                                            #accuracy scores 
+    for i in range(len(lamda)):                                              # Run loops over hidden neurons and learning rates to calculate 
+        for j in range(len(eta)):                                            # accuracy scores 
             for k in range(len(n_neuron)):
+                
                 print("lambda:",i+1,"/",len(lamda),", eta:",j+1,"/",len(eta),", n_neuron:",k+1,"/",len(n_neuron))
-                higgsmodel=NN_model(higgs_train.shape[1], normalize, n_layers,n_neuron[k],eta[j],lamda[i])
-                higgsmodel.fit(higgs_train,higgs_train_label,epochs=epochs, verbose=0)
+                
+                higgsmodel=NN_model(higgs_train.shape[1],n_layers,n_neuron[k],eta[j],lamda[i], normalize)
+                higgsmodel.fit(higgs_train,higgs_train_label,epochs=epochs,batch_size=batch_size,verbose=0)
                 print("Accuracy test")
-                Train_accuracy[i,j,k]=higgsmodel.evaluate(higgs_train,higgs_train_label)[1]
-                Test_accuracy[i,j,k]=higgsmodel.evaluate(higgs_test,higgs_test_label)[1]
+                
+                Train_accuracy[i,j,k]=higgsmodel.evaluate(higgs_train, higgs_train_label)[1]
+                Test_accuracy[i,j,k]=higgsmodel.evaluate(higgs_test, higgs_test_label)[1]
     
     max=np.max(Train_accuracy)
     train_indices=np.where(Train_accuracy==max)
@@ -89,10 +99,15 @@ def grid_search(n_lays, eta, lamda, n_neuron, eps):
     indices=np.where(Test_accuracy==max)
     print("Best testing accuracy:",max)
     print("The parameters are: lambda:",lamda[int(indices[0])],", eta:", eta[int(indices[1])],"and n_neuron:",n_neuron[int(indices[2])])
-    return Train_accuracy, Test_accuracy, indices, train_indices
+
+    higgs_model=NN_model(higgs_train.shape[1],n_layers,n_neuron[int(indices[2])],eta[int(indices[1])],lamda[int(indices[0])])
+    higgs_model.fit(higgs_train,higgs_train_label,epochs=epochs)
+    
+    return Train_accuracy, Test_accuracy, higgs_model, indices, train_indices
 
 
-def plot_data(x,y,s,ind,data,title=None):
+
+def plot_data(x, y, s, ind, data, title=None):
 
     # plot results
     fontsize=16
@@ -125,11 +140,13 @@ def plot_data(x,y,s,ind,data,title=None):
         ax.set_xlabel('$\\mathrm{hidden\\ neurons}$',fontsize=fontsize)
         titlefr= title[:-2] + 'scores for $\eta$ and hidden neuron with $\lambda$ = %g' %lamda[int(ind[0])]
         ax.set_title(titlefr)
+        
     elif s =="n":
         ax.set_xlabel('$\eta$',fontsize=fontsize)
         ax.set_ylabel('$\lambda$',fontsize=fontsize)
         titlefr= title[:-2] + 'scores for $\eta$ and $\lambda$ with %g hidden neurons' %n_neuron[int(ind[2])]
         ax.set_title(titlefr)
+        
     elif s =="e":
         ax.set_ylabel('$\lambda$',fontsize=fontsize)
         ax.set_xlabel('$\\mathrm{hidden\\ neurons}$',fontsize=fontsize)
@@ -143,9 +160,9 @@ def plot_data(x,y,s,ind,data,title=None):
     plt.show()
     
     
-n_neuron = np.logspace(0,3,4,dtype=int)                               #Define number of neurons per layer
-eta = np.logspace(-3, 0, 4)                                           #Define vector of learning rates (parameter to SGD optimiser)
-lamda = np.logspace(-5, -2, 4)                                        #Define hyperparameter
+n_neuron = np.logspace(0,3,4,dtype=int)                                      # Define number of neurons per layer
+eta = np.logspace(-3, 0, 4)                                                  # Define vector of learning rates (parameter to SGD optimiser)
+lamda = np.logspace(-5, -2, 4)                                               # Define hyperparameter
 
 Train_accuracy, Test_accuracy, indices, train_ind = grid_search(3, eta, lamda, n_neuron, 10)
 
@@ -175,7 +192,7 @@ def PCA_tester(n_components, data_features, data_labels, eta, lamda, n_neuron):
     norm.adapt(higgs_train)
     model=NN_model(higgs_train.shape[1], norm, 3, n_neuron, eta, lamda)
     model.fit(higgs_train, higgs_train_label, epochs=10, verbose=0)
-    model.save('../Data/%g_RED_Supervised_Higgs'%n_components)
+    model.save('../Models/%g_RED_Supervised_Higgs'%n_components)
     print('Training accuracy')
     train = model.evaluate(higgs_train,higgs_train_label)[1]
     print('Testing acccuracy')
