@@ -123,7 +123,7 @@ def train(x_list, y_list, theta, lr, epochs, shots, backend):
         for x, y, (k, t) in zip(x_list, y_list, enumerate(theta)):
             y_pred, c = qnn(x, t, backend, shots)                            # Prediction
             loss[-1] += 0.5*(y_pred - y)**2                                  # Eq. 10
-            grad[k] = (y_pred - y)*gradient(x, t, backend, shots)            # Eq. 41
+            grad[k] = (y_pred - y)*gradient(x, t, backend, shots)            # Eq. 39
             
             
         theta += -lr*grad                                                    # Update parameters
